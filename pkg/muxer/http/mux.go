@@ -230,12 +230,16 @@ func (m *matchersTree) addRule(rule *rules.Tree, funcs matcherFuncs) error {
 		}
 
 		if rule.Not {
-			matcherFunc := m.matcher
-			m.matcher = func(req *http.Request) bool {
-				return !matcherFunc(req)
-			}
+			return not(httpFuncs[rule.Matcher])(route, rule.Value...)
 		}
-	}
 
-	return nil
+		return httpFuncs[rule.Matcher](route, rule.Value...)
+	}
+}
+
+// IsASCII checks if the given string contains only ASCII characters.
+func IsASCII(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool {
+		return r >= utf8.RuneSelf
+	})
 }
