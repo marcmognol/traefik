@@ -394,7 +394,6 @@ func TestDynConfBuilder_DefaultRule(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
@@ -3644,8 +3643,6 @@ func TestDynConfBuilder_build(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
-
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
@@ -3832,7 +3829,6 @@ func TestDynConfBuilder_getIPPort_docker(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
@@ -3855,7 +3851,72 @@ func TestDynConfBuilder_getIPPort_docker(t *testing.T) {
 	}
 }
 
-func TestDynConfBuilder_getIPAddress_docker(t *testing.T) {
+func TestDockerGetPort(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		container  docker.ContainerJSON
+		serverPort string
+		expected   string
+	}{
+		{
+			desc:      "no binding, no server port label",
+			container: containerJSON(name("foo")),
+			expected:  "",
+		},
+		{
+			desc: "binding, no server port label",
+			container: containerJSON(ports(nat.PortMap{
+				"80/tcp": {},
+			})),
+			expected: "80",
+		},
+		{
+			desc: "binding, multiple ports, no server port label",
+			container: containerJSON(ports(nat.PortMap{
+				"80/tcp":  {},
+				"443/tcp": {},
+			})),
+			expected: "80",
+		},
+		{
+			desc:       "no binding, server port label",
+			container:  containerJSON(),
+			serverPort: "8080",
+			expected:   "8080",
+		},
+		{
+			desc: "binding, server port label",
+			container: containerJSON(
+				ports(nat.PortMap{
+					"80/tcp": {},
+				})),
+			serverPort: "8080",
+			expected:   "8080",
+		},
+		{
+			desc: "binding, multiple ports, server port label",
+			container: containerJSON(ports(nat.PortMap{
+				"8080/tcp": {},
+				"80/tcp":   {},
+			})),
+			serverPort: "8080",
+			expected:   "8080",
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.desc, func(t *testing.T) {
+			t.Parallel()
+
+			dData := parseContainer(test.container)
+
+			actual := getPort(dData, test.serverPort)
+			assert.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func TestDockerGetIPAddress(t *testing.T) {
 	testCases := []struct {
 		desc      string
 		container docker.ContainerJSON
@@ -3945,7 +4006,6 @@ func TestDynConfBuilder_getIPAddress_docker(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
@@ -4015,11 +4075,44 @@ func TestDynConfBuilder_getIPAddress_swarm(t *testing.T) {
 	}
 
 	for serviceID, test := range testCases {
-		test := test
 		t.Run(strconv.Itoa(serviceID), func(t *testing.T) {
 			t.Parallel()
 
-			p := &SwarmProvider{}
+			provider := &Provider{
+				SwarmMode: true,
+			}
+
+			dData, err := provider.parseService(context.Background(), test.service, test.networks)
+			require.NoError(t, err)
+
+			actual := provider.getIPAddress(context.Background(), dData)
+			assert.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func TestSwarmGetPort(t *testing.T) {
+	testCases := []struct {
+		service    swarm.Service
+		serverPort string
+		networks   map[string]*docker.NetworkResource
+		expected   string
+	}{
+		{
+			service: swarmService(
+				withEndpointSpec(modeDNSSR),
+			),
+			networks:   map[string]*docker.NetworkResource{},
+			serverPort: "8080",
+			expected:   "8080",
+		},
+	}
+
+	for serviceID, test := range testCases {
+		t.Run(strconv.Itoa(serviceID), func(t *testing.T) {
+			t.Parallel()
+
+			p := Provider{}
 
 			dData, err := p.parseService(context.Background(), test.service, test.networks)
 			require.NoError(t, err)

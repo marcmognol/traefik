@@ -222,8 +222,6 @@ func TestMuxer(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
-
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
@@ -378,14 +376,12 @@ func Test_addRoutePriority(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 			muxer, err := NewMuxer()
 			require.NoError(t, err)
 
 			for _, route := range test.cases {
-				route := route
 				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("X-From", route.xFrom)
 				})
@@ -404,6 +400,85 @@ func Test_addRoutePriority(t *testing.T) {
 			muxer.ServeHTTP(w, req)
 
 			assert.Equal(t, test.expected, w.Header().Get("X-From"))
+		})
+	}
+}
+
+func TestHostRegexp(t *testing.T) {
+	testCases := []struct {
+		desc    string
+		hostExp string
+		urls    map[string]bool
+	}{
+		{
+			desc:    "capturing group",
+			hostExp: "{subdomain:(foo\\.)?bar\\.com}",
+			urls: map[string]bool{
+				"http://foo.bar.com": true,
+				"http://bar.com":     true,
+				"http://fooubar.com": false,
+				"http://barucom":     false,
+				"http://barcom":      false,
+			},
+		},
+		{
+			desc:    "non capturing group",
+			hostExp: "{subdomain:(?:foo\\.)?bar\\.com}",
+			urls: map[string]bool{
+				"http://foo.bar.com": true,
+				"http://bar.com":     true,
+				"http://fooubar.com": false,
+				"http://barucom":     false,
+				"http://barcom":      false,
+			},
+		},
+		{
+			desc:    "regex insensitive",
+			hostExp: "{dummy:[A-Za-z-]+\\.bar\\.com}",
+			urls: map[string]bool{
+				"http://FOO.bar.com": true,
+				"http://foo.bar.com": true,
+				"http://fooubar.com": false,
+				"http://barucom":     false,
+				"http://barcom":      false,
+			},
+		},
+		{
+			desc:    "insensitive host",
+			hostExp: "{dummy:[a-z-]+\\.bar\\.com}",
+			urls: map[string]bool{
+				"http://FOO.bar.com": true,
+				"http://foo.bar.com": true,
+				"http://fooubar.com": false,
+				"http://barucom":     false,
+				"http://barcom":      false,
+			},
+		},
+		{
+			desc:    "insensitive host simple",
+			hostExp: "foo.bar.com",
+			urls: map[string]bool{
+				"http://FOO.bar.com": true,
+				"http://foo.bar.com": true,
+				"http://fooubar.com": false,
+				"http://barucom":     false,
+				"http://barcom":      false,
+			},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.desc, func(t *testing.T) {
+			t.Parallel()
+
+			rt := &mux.Route{}
+			err := hostRegexp(rt, test.hostExp)
+			require.NoError(t, err)
+
+			for testURL, match := range test.urls {
+				req := testhelpers.MustNewRequest(http.MethodGet, testURL, nil)
+				assert.Equal(t, match, rt.Match(req, &mux.RouteMatch{}), testURL)
+			}
 		})
 	}
 }
@@ -446,7 +521,6 @@ func TestParseDomains(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.expression, func(t *testing.T) {
 			t.Parallel()
 
@@ -511,7 +585,6 @@ func TestEmptyHost(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
