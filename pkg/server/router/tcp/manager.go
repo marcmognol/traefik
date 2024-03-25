@@ -293,7 +293,8 @@ func (m *Manager) addTCPHandlers(ctx context.Context, configs map[string]*runtim
 		if len(domains) > 0 && routerConfig.TLS == nil && domains[0] != "*" {
 			routerErr := fmt.Errorf("invalid rule: %q , has HostSNI matcher, but no TLS on router", routerConfig.Rule)
 			routerConfig.AddError(routerErr, true)
-			logger.Error().Err(routerErr).Send()
+			logger.Error(routerErr)
+			continue
 		}
 
 		var handler tcp.Handler
