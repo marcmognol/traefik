@@ -8,11 +8,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
-	"github.com/rs/zerolog/log"
-	tcpmuxer "github.com/traefik/traefik/v3/pkg/muxer/tcp"
-	"github.com/traefik/traefik/v3/pkg/tcp"
+	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
+	"github.com/traefik/traefik/v2/pkg/log"
+	tcpmuxer "github.com/traefik/traefik/v2/pkg/muxer/tcp"
+	"github.com/traefik/traefik/v2/pkg/tcp"
 )
 
 const defaultBufSize = 4096
@@ -157,6 +159,12 @@ func (r *Router) ServeTCP(conn tcp.WriteCloser) {
 		return
 	}
 
+	// Handling ACME-TLS/1 challenges.
+	if slices.Contains(hello.protos, tlsalpn01.ACMETLS1Protocol) {
+		r.acmeTLSALPNHandler().ServeTCP(r.GetConn(conn, hello.peeked))
+		return
+	}
+
 	// For real, the handler eventually used for HTTPS is (almost) always the same:
 	// it is the httpsForwarder that is used for all HTTPS connections that match
 	// (which is also incidentally the same used in the last block below for 404s).
@@ -201,9 +209,20 @@ func (r *Router) ServeTCP(conn tcp.WriteCloser) {
 	conn.Close()
 }
 
-// AddTCPRoute defines a handler for the given rule.
-func (r *Router) AddTCPRoute(rule string, priority int, target tcp.Handler) error {
-	return r.muxerTCP.AddRoute(rule, "", priority, target)
+// acmeTLSALPNHandler returns a special handler to solve ACME-TLS/1 challenges.
+func (r *Router) acmeTLSALPNHandler() tcp.Handler {
+	if r.httpsTLSConfig == nil {
+		return &brokenTLSRouter{}
+	}
+
+	return tcp.HandlerFunc(func(conn tcp.WriteCloser) {
+		_ = tls.Server(conn, r.httpsTLSConfig).Handshake()
+	})
+}
+
+// AddRoute defines a handler for the given rule.
+func (r *Router) AddRoute(rule string, priority int, target tcp.Handler) error {
+	return r.muxerTCP.AddRoute(rule, priority, target)
 }
 
 // AddHTTPTLSConfig defines a handler for a given sniHost and sets the matching tlsConfig.
